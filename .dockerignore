@@ -1,4 +1,3 @@
-.git
-.sessions
-__pycache__
-*.log
+*
+!worker.py
+!Dockerfile

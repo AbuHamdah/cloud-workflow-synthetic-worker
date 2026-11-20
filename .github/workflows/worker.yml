@@ -1,4 +1,4 @@
-name: Independent synthetic worker
+name: Independent real-application worker
 on:
   workflow_dispatch:
 permissions:
@@ -14,10 +14,10 @@ jobs:
           WORKER_TOKEN: ${{ secrets.WORKER_TOKEN }}
         run: |
           python -c 'import os; assert len(os.environ["WORKER_TOKEN"]) >= 32'
-          docker build -t synthetic-worker .
-          docker run -d --name synthetic-worker --cpus 1 --memory 512m \
+          docker build -t real-application-worker .
+          docker run -d --name real-application-worker --cpus 1 --memory 512m \
             -p 127.0.0.1:8900:8900 --env WORKER_TOKEN --env GITHUB_RUN_ID \
-            --env GITHUB_REPOSITORY synthetic-worker
+            --env GITHUB_REPOSITORY real-application-worker
           python - <<'PY'
           import os, time, urllib.request
           for attempt in range(30):
@@ -57,11 +57,11 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .sessions/
           git commit -m "Record ephemeral test endpoint"
-          git push origin HEAD:main
+          git push origin HEAD:real-applications
       - name: Serve validation requests
         run: python -c "import time; time.sleep(2400)"
       - name: Stop test worker
         if: always()
         run: |
-          docker rm -f synthetic-worker || true
+          docker rm -f real-application-worker || true
           if test -f tunnel.pid; then kill "$(cat tunnel.pid)" || true; fi

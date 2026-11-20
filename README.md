@@ -1,22 +1,30 @@
-# Ephemeral synthetic workflow worker
+# Bounded real-application test worker
 
-This repository provides a small authenticated HTTP worker for testing workflow execution across independently hosted Linux nodes. Test payloads are synthetic.
+This generic worker executes allow-listed Montage and MAQ operations on supplied
+test objects. It contains no paper, author information, application input data,
+runtime credentials, or scientific results. The original synthetic worker remains
+unchanged on the repository's main branch.
 
-The worker stores test files in memory, checks task inputs, waits for a bounded synthetic service time, and emits synthetic outputs. Every endpoint requires a bearer token supplied at runtime.
+The proposed publication is a separate `real-applications` branch containing only
+these five files: worker.py, Dockerfile, .dockerignore, README.md, and
+.github/workflows/worker.yml. The workflow uses a standard hosted Ubuntu runner,
+one-CPU/512-MiB container, an authenticated temporary tunnel and bounded lifetime.
+It records a temporary endpoint in .sessions on that branch. No paid service or
+payment card is used. The coordinator cancels the job after collection and deletes
+the runtime secret; the workflow also has a hard timeout and unconditional cleanup.
 
-## Worker API
+Supported operations: mProject; mImgtbl + mAdd; MAQ fasta2bfa, fastq2bfq, map
+(fixed random seed), mapmerge, mapview and depth-only pileup. There is no shell or
+arbitrary executable/argument endpoint. Every request requires a bearer token of
+at least 32 characters. File names are restricted to simple basenames. Requests
+are capped at 64 MiB, stored objects at 320 MiB, and each tool invocation at 120 s.
+Requests may use either fresh or persistent HTTP/1.1 client connections.
 
-- GET /health checks readiness.
-- GET /identity returns the process identity, software version, a boot-ID hash, and the GitHub run identifier.
-- POST /reset clears the in-memory test store.
-- POST /file/ID stores a test file; GET /file/ID retrieves it.
-- POST /probe stores a probe payload.
-- POST /run accepts inputs, outputs, and seconds as a JSON test task.
+`/identity` records source hash, package versions, quota and hashed kernel boot ID.
+`/run` records tool argv, exit status, wall time, CPU time, peak process RSS and
+output sizes/SHA-256 values. Runtime token files belong only to the coordinator's
+private temporary directory and must never be committed.
 
-The GitHub Actions workflow starts the worker in a container limited to one CPU and 512 MiB, opens a temporary Cloudflare Quick Tunnel, and records its URL in .sessions/RUN_ID.json. It remains available for up to 40 minutes after setup, with a 45-minute job timeout. Cancelling the job ends the worker.
-
-Set the repository secret WORKER_TOKEN to a fresh random value of at least 32 characters before dispatch. The token is supplied to the container at runtime. The published session record contains the endpoint URL and run ID. Access requires the bearer token.
-
-The workflow uses a standard Ubuntu runner, downloads a checksum-pinned cloudflared binary from the official release, and uses a pinned Python base image. It does not upload Actions artifacts or configure an Actions cache.
-
-The source package can be reviewed independently before creating the repository. Its public files contain the worker, Docker build, and workflow described here.
+Inputs are supplied by a separate experimental client. MAQ use with generated
+sequence reads validates computational kernels, not biological inference. Montage
+subworkflows without background matching are not full production mosaic pipelines.
