@@ -1,0 +1,67 @@
+name: Independent synthetic worker
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  worker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Build and start test worker
+        env:
+          WORKER_TOKEN: ${{ secrets.WORKER_TOKEN }}
+        run: |
+          python -c 'import os; assert len(os.environ["WORKER_TOKEN"]) >= 32'
+          docker build -t synthetic-worker .
+          docker run -d --name synthetic-worker --cpus 1 --memory 512m \
+            -p 127.0.0.1:8900:8900 --env WORKER_TOKEN --env GITHUB_RUN_ID \
+            --env GITHUB_REPOSITORY synthetic-worker
+          python - <<'PY'
+          import os, time, urllib.request
+          for attempt in range(30):
+              try:
+                  request = urllib.request.Request("http://127.0.0.1:8900/health",
+                      headers={"Authorization": "Bearer " + os.environ["WORKER_TOKEN"]})
+                  urllib.request.urlopen(request, timeout=5).close()
+                  break
+              except OSError:
+                  if attempt == 29:
+                      raise
+                  time.sleep(1)
+          PY
+      - name: Open temporary test tunnel
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/download/2026.11.1/cloudflared-linux-amd64 -o cloudflared
+          echo "97bb3b02d23a5980fc9c15a1a270e692da1923f103f920d5b16d4931d5ab55e7  cloudflared" | sha256sum -c -
+          chmod +x cloudflared
+          ./cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8900 > tunnel.log 2>&1 &
+          echo "$!" > tunnel.pid
+          python - <<'PY'
+          import json, os, pathlib, re, time
+          for attempt in range(120):
+              text = pathlib.Path("tunnel.log").read_text(errors="replace")
+              matches = re.findall(r"https://[a-z0-9-]+\.trycloudflare\.com", text)
+              if matches:
+                  folder = pathlib.Path(".sessions")
+                  folder.mkdir(exist_ok=True)
+                  (folder / (os.environ["GITHUB_RUN_ID"] + ".json")).write_text(
+                      json.dumps({"endpoint": matches[0], "run_id": os.environ["GITHUB_RUN_ID"]}))
+                  break
+              time.sleep(1)
+          else:
+              raise SystemExit("No tunnel endpoint was created")
+          PY
+          git config user.name github-actions
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .sessions/
+          git commit -m "Record ephemeral test endpoint"
+          git push origin HEAD:main
+      - name: Serve validation requests
+        run: python -c "import time; time.sleep(2400)"
+      - name: Stop test worker
+        if: always()
+        run: |
+          docker rm -f synthetic-worker || true
+          if test -f tunnel.pid; then kill "$(cat tunnel.pid)" || true; fi

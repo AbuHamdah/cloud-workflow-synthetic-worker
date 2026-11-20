@@ -1,0 +1,4 @@
+.git
+.sessions
+__pycache__
+*.log
